@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AFL Scores</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: transparent; overflow: hidden; }
+
+    .scoreboard {
+      display: flex;
+      align-items: stretch;
+      height: 70px;
+      background: #0d1b3e;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Round badge */
+    .round-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 46px;
+      background: #1a3a6b;
+      border-right: 1px solid rgba(255,255,255,0.15);
+      flex-shrink: 0;
+      padding: 0 6px;
+    }
+    .round-badge .rd  { font-size: 9px;  font-weight: bold; letter-spacing: 1px; opacity: 0.65; }
+    .round-badge .num { font-size: 20px; font-weight: bold; line-height: 1; }
+
+    /* Scrollable game area */
+    .games-wrap {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+    }
+    .games-wrap::-webkit-scrollbar { display: none; }
+
+    .games-inner {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-width: max-content;
+    }
+
+    .games-row {
+      display: flex;
+      align-items: center;
+      flex: 1;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .games-row:last-child { border-bottom: none; }
+
+    /* Individual game cell */
+    .game {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 11px;
+      height: 100%;
+      border-right: 1px solid rgba(255,255,255,0.1);
+      white-space: nowrap;
+    }
+
+    .team  { font-size: 11px; font-weight: bold; letter-spacing: 0.3px; }
+    .score { font-size: 11px; font-weight: bold; color: #e0e0e0; }
+    .sep   { font-size: 9px;  color: rgba(255,255,255,0.35); }
+    .venue { font-size: 9px;  color: rgba(255,255,255,0.4); }
+    .ft    { font-size: 9px;  color: rgba(255,255,255,0.38); }
+    .live  { font-size: 9px;  color: #22c55e; font-weight: bold; animation: pulse 1.4s infinite; }
+    .ftime { font-size: 9px;  color: #60a5fa; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+    /* All matches link */
+    .all-matches {
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      background: #1a3a6b;
+      border-left: 1px solid rgba(255,255,255,0.15);
+      color: #60a5fa;
+      font-size: 10px;
+      font-weight: bold;
+      text-decoration: none;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .all-matches:hover { background: #1f4a8a; }
+
+    .status-msg {
+      padding: 0 16px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.45);
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="scoreboard">
+    <div class="round-badge">
+      <span class="rd">RD</span>
+      <span class="num" id="rnum">–</span>
+    </div>
+    <div class="games-wrap">
+      <div class="games-inner" id="games-inner">
+        <div class="games-row"><span class="status-msg">Loading AFL scores…</span></div>
+        <div class="games-row"></div>
+      </div>
+    </div>
+    <a class="all-matches" href="https://www.afl.com.au/matches" target="_blank">All<br>matches</a>
+  </div>
+
+<script>
+  const ABBREV = {
+    'Adelaide Crows':'ADEL','Brisbane Lions':'BL','Carlton':'CARL',
+    'Collingwood':'COLL','Essendon':'ESS','Fremantle':'FRE',
+    'Geelong':'GEEL','Gold Coast':'GC','Gold Coast Suns':'GC',
+    'GWS Giants':'GWS','Greater Western Sydney':'GWS',
+    'Greater Western Sydney Giants':'GWS','Hawthorn':'HAW',
+    'Melbourne':'MELB','North Melbourne':'NM',
+    'Port Adelaide':'PORT','Richmond':'RICH','St Kilda':'STK',
+    'Sydney':'SYD','Sydney Swans':'SYD','West Coast':'WCE',
+    'West Coast Eagles':'WCE','Western Bulldogs':'WB','Footscray':'WB'
+  };
+
+  const VENUES = {
+    'M.C.G.':'MCG','Melbourne Cricket Ground':'MCG',
+    'Adelaide Oval':'AO','Gabba':'GABBA','The Gabba':'GABBA',
+    'SCG':'SCG','Sydney Cricket Ground':'SCG',
+    'Optus Stadium':'OS','Marvel Stadium':'MARVEL',
+    'GMHBA Stadium':'GMHBA','Stadium Australia':'SAS',
+    'Blundstone Arena':'BLUND','Heritage Bank Stadium':'HBS',
+    'ENGIE Stadium':'ENGIE','TIO Stadium':'TIO',
+    'University of Tasmania Stadium':'UTAS',
+    'Cazalys Stadium':'CAZ','Norwood Oval':'NORW',
+    'Riverway Stadium':'RIV','Traeger Park':'TRAE'
+  };
+
+  function abbr(n)  { return ABBREV[n]  || (n||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,4); }
+  function venue(v) { if (!v) return ''; const k = Object.keys(VENUES).find(k => v.includes(k)); return k ? VENUES[k] : v.replace(/\s*\(.*\)/,'').slice(0,6).toUpperCase(); }
+
+  function gametime(dateStr) {
+    if (!dateStr) return '';
+    try {
+      // Squiggle dates are AEST (UTC+10)
+      const d = new Date(dateStr.replace(' ','T') + '+10:00');
+      const fmt = new Intl.DateTimeFormat('en-AU', {
+        weekday:'short', hour:'numeric', minute:'2-digit',
+        hour12:true, timeZone:'Australia/Sydney'
+      }).format(d);
+      return fmt.replace(',','').toUpperCase();
+    } catch(e) { return dateStr.slice(11,16); }
+  }
+
+  async function load() {
+    try {
+      const year = new Date().getFullYear();
+      const r = await fetch(`https://api.squiggle.com.au/?q=games;year=${year}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!r.ok) throw new Error('fetch failed');
+      const { games } = await r.json();
+      if (!games?.length) throw new Error('no games');
+
+      // Pick the best round to display
+      const live = games.filter(g => g.complete > 0 && g.complete < 100);
+      let targetRound;
+
+      if (live.length) {
+        targetRound = live[0].round;
+      } else {
+        const upcoming = games
+          .filter(g => g.complete === 0 && g.date)
+          .sort((a,b) => new Date(a.date.replace(' ','T')) - new Date(b.date.replace(' ','T')));
+        targetRound = upcoming.length
+          ? upcoming[0].round
+          : Math.max(...games.map(g => g.round));
+      }
+
+      const roundGames = games
+        .filter(g => g.round === targetRound)
+        .sort((a,b) => new Date((a.date||'').replace(' ','T')) - new Date((b.date||'').replace(' ','T')));
+
+      document.getElementById('rnum').textContent = targetRound;
+
+      const mid  = Math.ceil(roundGames.length / 2);
+      const row1 = roundGames.slice(0, mid);
+      const row2 = roundGames.slice(mid);
+
+      function cell(g) {
+        const ha = abbr(g.hteam), aa = abbr(g.ateam), vn = venue(g.venue);
+        const done = g.complete === 100;
+        const going = g.complete > 0 && g.complete < 100;
+        let mid = '';
+        if (done)  mid = `<span class="score">${g.hscore}</span><span class="sep">–</span><span class="score">${g.ascore}</span>`;
+        else if (going) mid = `<span class="score">${g.hscore??0}</span><span class="live"> ● </span><span class="score">${g.ascore??0}</span>`;
+        else       mid = `<span class="ftime">${gametime(g.date)}</span>`;
+        return `<div class="game">
+          <span class="team">${ha}</span>${mid}<span class="team">${aa}</span>
+          <span class="venue">${vn}</span>${done?'<span class="ft">FT</span>':''}
+        </div>`;
+      }
+
+      document.getElementById('games-inner').innerHTML =
+        `<div class="games-row">${row1.map(cell).join('')}</div>
+         <div class="games-row">${row2.map(cell).join('')}</div>`;
+
+    } catch(e) {
+      document.getElementById('games-inner').innerHTML =
+        `<div class="games-row"><span class="status-msg">Scores unavailable — retrying…</span></div>
+         <div class="games-row"></div>`;
+    }
+  }
+
+  load();
+  setInterval(load, 300000); // refresh every 5 min
+</script>
+</body>
+</html>
