@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASX Mining Ticker</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+    .wrap { width: 100%; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- TradingView Ticker Tape Widget -->
+    <div class="tradingview-widget-container">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript"
+        src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+      {
+        "symbols": [
+          { "description": "BHP", "proName": "ASX:BHP" },
+          { "description": "Rio Tinto", "proName": "ASX:RIO" },
+          { "description": "Fortescue", "proName": "ASX:FMG" },
+          { "description": "Mineral Resources", "proName": "ASX:MIN" },
+          { "description": "Pilbara Minerals", "proName": "ASX:PLS" },
+          { "description": "South32", "proName": "ASX:S32" },
+          { "description": "Northern Star", "proName": "ASX:NST" },
+          { "description": "IGO", "proName": "ASX:IGO" },
+          { "description": "Lynas Rare Earths", "proName": "ASX:LYC" }
+        ],
+        "showSymbolLogo": true,
+        "isTransparent": false,
+        "displayMode": "adaptive",
+        "colorTheme": "light",
+        "locale": "en"
+      }
+      </script>
+    </div>
+    <!-- End TradingView Widget -->
+  </div>
+</body>
+</html>
